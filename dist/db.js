@@ -1,0 +1,9 @@
+let opening;
+export function openDB(){return opening??=new Promise((resolve,reject)=>{const request=indexedDB.open('money2020-capture',1);request.onupgradeneeded=()=>{request.result.createObjectStore('records',{keyPath:'id'});request.result.createObjectStore('meta');};request.onsuccess=()=>{request.result.onversionchange=()=>request.result.close();resolve(request.result);};request.onerror=()=>reject(request.error);});}
+export async function transaction(stores,mode,callback){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction(stores,mode);let value;tx.oncomplete=()=>resolve(value);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Gravação cancelada.'));try{value=callback(tx);}catch(e){tx.abort();reject(e);}});}
+export async function allRecords(){let data;await transaction(['records'],'readonly',tx=>{tx.objectStore('records').getAll().onsuccess=e=>{data=e.target.result;};});return data.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));}
+export async function getMeta(key){let data;await transaction(['meta'],'readonly',tx=>{tx.objectStore('meta').get(key).onsuccess=e=>{data=e.target.result;};});return data;}
+export const setMeta=(key,value)=>transaction(['meta'],'readwrite',tx=>tx.objectStore('meta').put(value,key));
+export const saveRecord=(record,clearDraft=true)=>transaction(['records','meta'],'readwrite',tx=>{tx.objectStore('records').put(record);if(clearDraft)tx.objectStore('meta').delete('draft');});
+export const deleteRecord=id=>transaction(['records'],'readwrite',tx=>tx.objectStore('records').delete(id));
+export const mergeRecords=(records,draft)=>transaction(['records','meta'],'readwrite',tx=>{for(const record of records)tx.objectStore('records').put(record);if(draft)tx.objectStore('meta').put(draft,'draft');});
